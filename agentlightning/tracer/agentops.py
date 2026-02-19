@@ -152,6 +152,7 @@ class AgentOpsTracer(OtelTracer):
             raise RuntimeError("LightningSpanProcessor is not initialized. Call init_worker() first.")
         tracer_provider = self._get_tracer_provider()
 
+       
         kwargs: dict[str, Any] = {}
         if name is not None:
             kwargs["trace_name"] = name
@@ -176,6 +177,7 @@ class AgentOpsTracer(OtelTracer):
                     yield trace_api.get_tracer(__name__, tracer_provider=tracer_provider)
         else:
             raise ValueError("store, rollout_id, and attempt_id must be either all provided or all None")
+
 
     @contextmanager
     def _agentops_trace_context(self, rollout_id: Optional[str], attempt_id: Optional[str], kwargs: dict[str, Any]):
@@ -210,8 +212,9 @@ class AgentOpsTracer(OtelTracer):
         if client_instance.initialized:
             api_key = client_instance.config.api_key
         else:
-            logger.warning(
-                "AgentOps client not initialized when creating LangchainCallbackHandler. API key may be missing."
+            logger.error(
+                "Mismatch between global singleton TracerProvider and AgentOps TracerProvider. "
+                "AgentOps might not work properly."
             )
         return LangchainCallbackHandler(api_key=api_key, tags=tags)
 
@@ -225,9 +228,9 @@ class AgentOpsTracer(OtelTracer):
                 raise RuntimeError("AgentOps TracerProvider is not initialized.")
 
             if get_tracer_provider() is not instance.provider:
-                logger.error(
-                    "Mismatch between global singleton TracerProvider and AgentOps TracerProvider. "
-                    "AgentOps might not work properly."
+                logger.debug(
+                    "Global TracerProvider differs from AgentOps; trace_context may set global so "
+                    "instrumentation spans are captured."
                 )
 
             if not isinstance(instance.provider, TracerProviderImpl):  # type: ignore
