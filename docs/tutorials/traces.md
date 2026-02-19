@@ -22,6 +22,10 @@ async with tracer.trace_context(
 
 The context manager then requests sequence numbers from the store, converts OpenTelemetry spans into [`Span`][agentlightning.Span] objects, and persists them in the middle or at the end of the attempt, depending on the tracer implementation. Agent-lightning ships two tracers out of the box; both rely on [OpenTelemetry Traces](https://opentelemetry.io/docs/concepts/signals/traces/) and ignore metrics or logs.
 
+!!! note "Running without a Runner"
+
+    If you run agent logic directly (e.g. in a script) without a [Runner][agentlightning.Runner] or [Trainer][agentlightning.Trainer], use the [`@observe`][agentlightning.observe] decorator to create a trace context and send spans to the store. See [Trace agent runs with @observe](observe.md).
+
 !!! tip "What's instrumentation?"
 
     In simple terms, *instrumentation* means adding "patches" or hooks inside your code so you can observe what it’s doing while it runs. Think of it like putting flight recorders in an airplane — instrumentation records key actions, inputs, outputs, and timings without changing how the code behaves. In Agent-lightning tracers, this instrumentation automatically creates spans (small, structured records of work) that show what each part of an agent did, how long it took, and how different steps connect together.

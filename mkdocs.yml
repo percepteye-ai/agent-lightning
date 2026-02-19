@@ -109,6 +109,7 @@ nav:
     - Write Agents: tutorials/write-agents.md
     - Debugging: tutorials/debug.md
     - Work with Traces: tutorials/traces.md
+    - Trace with @observe: tutorials/observe.md
     - Use Emitters: tutorials/emitter.md
     - Parallelize: tutorials/parallelize.md
   - Algorithm Zoo:
