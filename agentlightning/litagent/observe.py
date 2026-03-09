@@ -48,8 +48,12 @@ async def _run_observed(
     store: LightningStore,
     tracer: Tracer,
     is_async_func: bool,
-) -> Any:
-    """Run the function in a trace context and send spans to the store."""
+) -> tuple[Any, str, str]:
+    """Run the function in a trace context and send spans to the store.
+
+    Returns:
+        Tuple of (function result, rollout_id, attempt_id).
+    """
     task_input = _task_input_from_args(func, args, kwargs)
     with tracer.lifespan(store):
         attempted = await store.start_rollout(input=task_input)
@@ -63,13 +67,15 @@ async def _run_observed(
             attempt_id=attempt_id,
         ):
             if is_async_func:
-                return await func(*args, **kwargs)
-            ctx = contextvars.copy_context()
+                result = await func(*args, **kwargs)
+            else:
+                ctx = contextvars.copy_context()
 
-            def run_in_context() -> Any:
-                return ctx.run(func, *args, **kwargs)
+                def run_in_context() -> Any:
+                    return ctx.run(func, *args, **kwargs)
 
-            return await asyncio.to_thread(run_in_context)
+                result = await asyncio.to_thread(run_in_context)
+        return (result, rollout_id, attempt_id)
 
 
 @overload
@@ -100,11 +106,18 @@ def observe(
     and `AgentOpsTracer`. The decorated callable is always async and must be called
     with ``await``.
 
+    After a run, you can deduce the agent design (nodes, tools, sub-agents) from the
+    stored trace using [`infer_agent_design`][agentlightning.litagent.infer_agent_design].
+    Pass ``return_rollout_ids=True`` and the same ``store`` to get ``(result, rollout_id, attempt_id)``
+    so you can call that helper.
+
     Args:
         func: Function to observe. Can be sync or async; sync is run in a thread with
             context propagated so instrumentation spans attach to the same trace.
         store: Optional store. Spans are written here for the created rollout.
         tracer: Optional tracer. If None, `AgentOpsTracer` is used.
+        return_rollout_ids: If True, the wrapper returns ``(result, rollout_id, attempt_id)``
+            instead of just the result, so you can query the store for spans and infer design.
 
     Returns:
         An async wrapper that runs the function inside a trace context.
@@ -120,6 +133,7 @@ def observe(
     """
     store_arg = store
     tracer_arg = tracer
+    return_rollout_ids_arg = return_rollout_ids
 
     def decorator(f: Callable[..., Any]) -> Callable[..., Any]:
         is_async = asyncio.iscoroutinefunction(f)
@@ -127,7 +141,10 @@ def observe(
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             s: LightningStore = store_arg if store_arg is not None else InMemoryLightningStore()
             t: Tracer = tracer_arg if tracer_arg is not None else AgentOpsTracer()
-            return await _run_observed(f, args, kwargs, s, t, is_async)
+            result, rollout_id, attempt_id = await _run_observed(f, args, kwargs, s, t, is_async)
+            if return_rollout_ids_arg:
+                return (result, rollout_id, attempt_id)
+            return result
 
         functools.update_wrapper(wrapper, f)
         return wrapper
